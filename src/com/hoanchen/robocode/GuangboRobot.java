@@ -22,30 +22,19 @@ public class GuangboRobot extends TeamRobot {
 	//Variables
 	static double dir=1;
 	static double oldEnemyHeading;
-	static double enemyEnergy;
+	//static double enemyEnergy;
 	
 	public void run() {
+		
 		//set my robot colors
 		setColors();
 		
+		//Sets the gun and radar to turn independent from the robot's turn.
+		setAdjustGunForRobotTurn(true);
+		setAdjustRadarForGunTurn(true);
+		
         while (true) {
-        	double distance = Math.random()*300;
-            double angle = Math.random()*45;
-            ahead(distance);
-            ahead(100);
-            turnGunRight(90);
-            back(100);
-            turnGunRight(90);
-//            setAhead(100);
-//            setTurnGunRight(360); // max 360
-//            setTurnRadarLeft(180);
-//            setBack(100);
-//            setTurnGunRight(0);
-            //setTurnRadarRight(180);
-            //setTurnLeft(100);
-//            setTurnRight(10.0);
-		System.out.println(getBattleFieldHeight());
-		System.out.println(getBattleFieldWidth());
+			turnRadarRightRadians(Double.POSITIVE_INFINITY);
         }
     }
 	/**
@@ -58,27 +47,31 @@ public class GuangboRobot extends TeamRobot {
 			return;
 		}
 		
+		//movement method
 		setTurnRight(90+e.getBearing()-(25*dir));
 		if (Math.random() < 0.05) {
 			dir=-dir;
 		}
-		
 		setAhead((e.getDistance()/1.75)*dir);
+		
+		
 		
 		Graphics2D g=getGraphics();
 
 		double absBearing=e.getBearingRadians()+getHeadingRadians();
  
  
+		/*This method of targeting is know as circular targeting; you assume your enemy will
+		 *keep moving with the same speed and turn rate that he is using at fire time.The 
+		 *base code comes from the wiki.
+		*/
+		
 		//Finding the heading and heading change.
 		double enemyHeading = e.getHeadingRadians();
 		double enemyHeadingChange = enemyHeading - oldEnemyHeading;
 		oldEnemyHeading = enemyHeading;
  
-		/*This method of targeting is know as circular targeting; you assume your enemy will
-		 *keep moving with the same speed and turn rate that he is using at fire time.The 
-		 *base code comes from the wiki.
-		*/
+		//predict enemy's movement
 		double deltaTime = 0;
 		double predictedX = getX()+e.getDistance()*Math.sin(absBearing);
 		double predictedY = getY()+e.getDistance()*Math.cos(absBearing);
@@ -96,7 +89,7 @@ public class GuangboRobot extends TeamRobot {
 			g.drawRect((int)predictedX-2,(int)predictedY-2,4,4);
  
 			//If our predicted coordinates are outside the walls, put them 18 distance units away from the walls as we know 
-			//that that is the closest they can get to the wall (Bots are non-rotating 36*36 squares).
+			//that that is the closest they can get to the wall
 			predictedX=Math.max(Math.min(predictedX,getBattleFieldWidth()-18),18);
 			predictedY=Math.max(Math.min(predictedY,getBattleFieldHeight()-18),18);
  
@@ -137,19 +130,18 @@ public class GuangboRobot extends TeamRobot {
  
     
     public void onHitByBullet(HitByBulletEvent e) {
-		//setTurnLeft(180);
-		enemyEnergy-=BULLET_DAMAGE;
+		//enemyEnergy-=BULLET_DAMAGE;
 	}
     
     //this method detects whether the robot hits the wall or hits another robot
     public void onHitWall(HitWallEvent e)
     {
-//    	setBack(100);
+    	//if hits the wall turn the direction opponent
 		dir=-dir;
     }
     
     
-    private void  setColors() {
+    private void setColors() {
 		setBodyColor(Color.yellow);
 		setGunColor(Color.black);
 		setRadarColor(Color.blue);

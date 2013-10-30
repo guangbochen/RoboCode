@@ -152,6 +152,7 @@ double angle = Math.toRadians((getHeading() + e.getBearing()) % 360);
     static double absoluteBearing(Point2D source, Point2D target) {
         return Math.atan2(target.getX() - source.getX(), target.getY() - source.getY());
     }
+    
 	public void onBulletHit(BulletHitEvent e){
 		Graphics2D g=getGraphics();
 		

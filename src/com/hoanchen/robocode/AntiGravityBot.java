@@ -4,17 +4,12 @@ import java.awt.Color;
 import java.awt.geom.Point2D;
 import java.util.Enumeration;
 import java.util.Hashtable;
-import java.util.Vector;
-
 import robocode.RobotDeathEvent;
 import robocode.ScannedRobotEvent;
 import robocode.TeamRobot;
 
 public class AntiGravityBot extends TeamRobot{
 	
-	final static double BULLET_POWER=3;//Our bulletpower.
-	final static double BULLET_DAMAGE=BULLET_POWER*4;//Formula for bullet damage.
-	final static double BULLET_SPEED=20-3*BULLET_POWER;//Formula for bullet speed.
 	/**
 	 * run: SnippetBot's default behavior
 	 */
@@ -25,6 +20,7 @@ public class AntiGravityBot extends TeamRobot{
 	double firePower;				//the power of the shot we will be using
 	double midpointstrength = 0;	//The strength of the gravity point in the middle of the field
 	int midpointcount = 0;			//Number of turns since that strength was changed.
+	
 	public void run() {
 		targets = new Hashtable();
 		target = new Enemy();
@@ -41,13 +37,12 @@ public class AntiGravityBot extends TeamRobot{
 			doGun();
 			out.println(target.distance);	//move the gun to predict where the enemy will be
 			fire(firePower);
-			//fire(BULLET_POWER);
 			execute();						//execute all commands
 		}
 	}
 	
 	void doFirePower() {
-		firePower = 300/target.distance;//selects a bullet power based on our distance away from the target
+		firePower = 450/target.distance;//selects a bullet power based on our distance away from the target
 		System.out.println(target.distance);
 		if (firePower > 3) {
 			firePower = 3;
@@ -135,6 +130,7 @@ public class AntiGravityBot extends TeamRobot{
 	/**keep the scanner turning**/
 	void doScanner() {
 		setTurnRadarLeftRadians(2*PI);
+//		turnRadarLeftRadians(Double.POSITIVE_INFINITY);
 	}
 	
 	/**Move the gun to the predicted next bearing of the enemy**/
@@ -208,6 +204,7 @@ public class AntiGravityBot extends TeamRobot{
 //		if (isTeammate(e.getName())) {
 //			return;
 //		}
+		
 		Enemy en;
 		if (targets.containsKey(e.getName())) {
 			en = (Enemy)targets.get(e.getName());
