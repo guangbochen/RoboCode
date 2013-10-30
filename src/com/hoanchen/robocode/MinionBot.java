@@ -1,14 +1,26 @@
 package com.hoanchen.robocode;
 
 import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.geom.Point2D;
 import java.util.Enumeration;
 import java.util.Hashtable;
+
+import robocode.HitByBulletEvent;
+import robocode.HitWallEvent;
 import robocode.RobotDeathEvent;
 import robocode.ScannedRobotEvent;
 import robocode.TeamRobot;
+import robocode.util.Utils;
 
-public class AntiGravityBot extends TeamRobot{
+public class MinionBot extends TeamRobot {
+
+	//These are constants. One advantage of these is that the logic in them (such as 20-3*BULLET_POWER)
+	//does not use codespace, making them cheaper than putting the logic in the actual code.
+ 
+	final static double BULLET_POWER=3;//Our bulletpower.
+	final static double BULLET_DAMAGE=BULLET_POWER*4;//Formula for bullet damage.
+	final static double BULLET_SPEED=20-3*BULLET_POWER;//Formula for bullet speed.
 	
 	/**
 	 * run: SnippetBot's default behavior
@@ -21,26 +33,169 @@ public class AntiGravityBot extends TeamRobot{
 	double midpointstrength = 0;	//The strength of the gravity point in the middle of the field
 	int midpointcount = 0;			//Number of turns since that strength was changed.
 	
+	//Variables
+	static double dir=1;
+	static double oldEnemyHeading;
+	//static double enemyEnergy;
+	
 	public void run() {
+		
 		targets = new Hashtable();
 		target = new Enemy();
 		target.distance = 100000;						//initialise the distance so that we can select a target
-		setColors(Color.red,Color.blue,Color.green);	//sets the colours of the robot
-		//the next two lines mean that the turns of the robot, gun and radar are independant
+		
+		//set my robot colors
+		setColors();
+		
+		//Sets the gun and radar to turn independent from the robot's turn.
 		setAdjustGunForRobotTurn(true);
 		setAdjustRadarForGunTurn(true);
-		turnRadarRightRadians(2*PI);					//turns the radar right around to get a view of the field
-		while(true) {
+		
+        while (true) {
+			turnRadarRightRadians(Double.POSITIVE_INFINITY);
+        }
+    }
+	/**
+	 * onScannedRobot: What to do when you see another robot
+	 */
+	public void onScannedRobot(ScannedRobotEvent e) {
+		
+		//if is team mate hold the fire
+		if (isTeammate(e.getName())) {
+			return;
+		}
+		
+	    double distance = e.getDistance();
+		if(distance>400)
+		{
+			
+			Enemy en;
+			if (targets.containsKey(e.getName())) {
+				en = (Enemy)targets.get(e.getName());
+			} else {
+				en = new Enemy();
+				targets.put(e.getName(),en);
+			}
+			//the next line gets the absolute bearing to the point where the bot is
+			double absbearing_rad = (getHeadingRadians()+e.getBearingRadians())%(2*PI);
+			//this section sets all the information about our target
+			en.name = e.getName();
+			double h = normaliseBearing(e.getHeadingRadians() - en.heading);
+			h = h/(getTime() - en.ctime);
+			en.changehead = h;
+			en.x = getX()+Math.sin(absbearing_rad)*e.getDistance(); //works out the x coordinate of where the target is
+			en.y = getY()+Math.cos(absbearing_rad)*e.getDistance(); //works out the y coordinate of where the target is
+			en.bearing = e.getBearingRadians();
+			en.heading = e.getHeadingRadians();
+			en.ctime = getTime();				//game time at which this scan was produced
+			en.speed = e.getVelocity();
+			en.distance = e.getDistance();	
+			en.live = true;
+			if ((en.distance < target.distance)||(target.live == false)) {
+				target = en;
+			}
+			
 			antiGravMove();					//Move the bot
 			doFirePower();					//select the fire power to use
 			doScanner();					//Oscillate the scanner over the bot
 			doGun();
-			out.println(target.distance);	//move the gun to predict where the enemy will be
 			fire(firePower);
 			execute();						//execute all commands
 		}
+		else
+		{
+			CicularTargeting(e);
+		}
+	    
+		
 	}
 	
+	public void CicularTargeting(ScannedRobotEvent e)
+	{
+		
+		//movement method
+		setTurnRight(90+e.getBearing()-(25*dir));
+		if (Math.random() < 0.05) {
+			dir=-dir;
+		}
+		setAhead((e.getDistance()/1.75)*dir);
+		
+		
+		
+		Graphics2D g=getGraphics();
+
+		double absBearing=e.getBearingRadians()+getHeadingRadians();
+ 
+ 
+		/*This method of targeting is know as circular targeting; you assume your enemy will
+		 *keep moving with the same speed and turn rate that he is using at fire time.The 
+		 *base code comes from the wiki.
+		*/
+		
+		//Finding the heading and heading change.
+		double enemyHeading = e.getHeadingRadians();
+		double enemyHeadingChange = enemyHeading - oldEnemyHeading;
+		oldEnemyHeading = enemyHeading;
+ 
+		//predict enemy's movement
+		double deltaTime = 0;
+		double predictedX = getX()+e.getDistance()*Math.sin(absBearing);
+		double predictedY = getY()+e.getDistance()*Math.cos(absBearing);
+		while((++deltaTime) * BULLET_SPEED <  Point2D.Double.distance(getX(), getY(), predictedX, predictedY)){	
+ 
+			//Add the movement we think our enemy will make to our enemy's current X and Y
+			predictedX += Math.sin(enemyHeading) * e.getVelocity();
+			predictedY += Math.cos(enemyHeading) * e.getVelocity();
+ 
+ 
+			//Find our enemy's heading changes.
+			enemyHeading += enemyHeadingChange;
+			
+			g.setColor(Color.red);
+			g.drawRect((int)predictedX-2,(int)predictedY-2,4,4);
+ 
+			//If our predicted coordinates are outside the walls, put them 18 distance units away from the walls as we know 
+			//that that is the closest they can get to the wall
+			predictedX=Math.max(Math.min(predictedX,getBattleFieldWidth()-18),18);
+			predictedY=Math.max(Math.min(predictedY,getBattleFieldHeight()-18),18);
+ 
+		}
+		//Find the bearing of our predicted coordinates from us.
+		double aim = Utils.normalAbsoluteAngle(Math.atan2(  predictedX - getX(), predictedY - getY()));
+ 
+		//Aim and fire.
+		setTurnGunRightRadians(Utils.normalRelativeAngle(aim - getGunHeadingRadians()));
+		setFire(BULLET_POWER);
+ 
+		setTurnRadarRightRadians(Utils.normalRelativeAngle(absBearing-getRadarHeadingRadians())*2);
+	}
+ 
+    
+    public void onHitByBullet(HitByBulletEvent e) {
+		//enemyEnergy-=BULLET_DAMAGE;
+	}
+    
+    //this method detects whether the robot hits the wall or hits another robot
+    public void onHitWall(HitWallEvent e)
+    {
+    	//if hits the wall turn the direction opponent
+		dir=-dir;
+    }
+    
+    
+    private void setColors() {
+		setBodyColor(Color.yellow);
+		setGunColor(Color.black);
+		setRadarColor(Color.blue);
+		setBulletColor(Color.yellow);
+		setScanColor(Color.green);
+    }
+    
+    
+    /**
+     * methods for anti-gravity movement
+     */
+    
 	void doFirePower() {
 		firePower = 450/target.distance;//selects a bullet power based on our distance away from the target
 		System.out.println(target.distance);
@@ -195,74 +350,38 @@ public class AntiGravityBot extends TeamRobot{
 		}
 		return 0;
 	}
-
-
-	/**
-	 * onScannedRobot: What to do when you see another robot
-	 */
-	public void onScannedRobot(ScannedRobotEvent e) {
-//		if (isTeammate(e.getName())) {
-//			return;
-//		}
-		
-		Enemy en;
-		if (targets.containsKey(e.getName())) {
-			en = (Enemy)targets.get(e.getName());
-		} else {
-			en = new Enemy();
-			targets.put(e.getName(),en);
-		}
-		//the next line gets the absolute bearing to the point where the bot is
-		double absbearing_rad = (getHeadingRadians()+e.getBearingRadians())%(2*PI);
-		//this section sets all the information about our target
-		en.name = e.getName();
-		double h = normaliseBearing(e.getHeadingRadians() - en.heading);
-		h = h/(getTime() - en.ctime);
-		en.changehead = h;
-		en.x = getX()+Math.sin(absbearing_rad)*e.getDistance(); //works out the x coordinate of where the target is
-		en.y = getY()+Math.cos(absbearing_rad)*e.getDistance(); //works out the y coordinate of where the target is
-		en.bearing = e.getBearingRadians();
-		en.heading = e.getHeadingRadians();
-		en.ctime = getTime();				//game time at which this scan was produced
-		en.speed = e.getVelocity();
-		en.distance = e.getDistance();	
-		en.live = true;
-		if ((en.distance < target.distance)||(target.live == false)) {
-			target = en;
-		}
-	}
-		
+     
 	public void onRobotDeath(RobotDeathEvent e) {
 		Enemy en = (Enemy)targets.get(e.getName());
 		en.live = false;		
 	}	
 }
 
-//class Enemy {
-//	/*
-//	 * ok, we should really be using accessors and mutators here,
-//	 * (i.e getName() and setName()) but life's too short.
-//	 */
-//	String name;
-//	public double bearing,heading,speed,x,y,distance,changehead;
-//	public long ctime; 		//game time that the scan was produced
-//	public boolean live; 	//is the enemy alive?
-//	public Point2D.Double guessPosition(long when) {
-//		double diff = when - ctime;
-//		double newY = y + Math.cos(heading) * speed * diff;
-//		double newX = x + Math.sin(heading) * speed * diff;
-//		
-//		return new Point2D.Double(newX, newY);
-//	}
-//}
-//
-//	/**Holds the x, y, and strength info of a gravity point**/
-//	class GravPoint {
-//    public double x,y,power;
-//    public GravPoint(double pX,double pY,double pPower) {
-//        x = pX;
-//        y = pY;
-//        power = pPower;
-//    }
-//	
-//}
+
+class Enemy {
+	/*
+	 * ok, we should really be using accessors and mutators here,
+	 * (i.e getName() and setName()) but life's too short.
+	 */
+	String name;
+	public double bearing,heading,speed,x,y,distance,changehead;
+	public long ctime; 		//game time that the scan was produced
+	public boolean live; 	//is the enemy alive?
+	public Point2D.Double guessPosition(long when) {
+		double diff = when - ctime;
+		double newY = y + Math.cos(heading) * speed * diff;
+		double newX = x + Math.sin(heading) * speed * diff;
+		
+		return new Point2D.Double(newX, newY);
+	}
+}
+
+	/**Holds the x, y, and strength info of a gravity point**/
+class GravPoint {
+    public double x,y,power;
+    public GravPoint(double pX,double pY,double pPower) {
+        x = pX;
+        y = pY;
+        power = pPower;
+    }
+}
